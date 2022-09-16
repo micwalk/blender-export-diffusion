@@ -1,5 +1,7 @@
 # blender-export-diffusion
-A Blender Add-on to add and a new export format to generate camera animation strings for the Deforum Diffusion notebook format. 
+A Blender Add-on to add an export format that generates animation strings for the Deforum Diffusion notebook format. Ability to select a range of frames to export, multiple cameras, and does a basic pass at not including redundant keyframes.
+
+Note: only supports 3d animation mode.
 
 Deforum Notebook GH: https://github.com/deforum/stable-diffusion
 Deforum Notebook Colab: https://colab.research.google.com/github/deforum/stable-diffusion/blob/main/Deforum_Stable_Diffusion.ipynb
