@@ -1,10 +1,10 @@
 bl_info = {
     "name": "Export Camera Animation to Diffusion Notebook String",
     "author": "Michael Walker (@mwalk10)",
-    "version": (1, 0, 0),
+    "version": (1, 1, 4),
     "blender": (3, 3, 0),
     "location": "File > Export > Diffusion Notebook String",
-    "description": "Export camera animations in a format for use in Deforum diffusion collab notebook animations.",
+    "description": "Export camera animations formatted for use in Deforum diffusion collab notebook animations.",
     "warning": "",
     "wiki_url": "",
     "category": "Import-Export",
@@ -16,14 +16,21 @@ from math import degrees
 from mathutils import Vector
 from bpy import context
 from math import isclose
+import json
 
-               
+def roundZero(num, magnitude_thresh = 0.00001):
+    if abs(num) > magnitude_thresh:
+        return num
+    else:
+        return 0
+        
 def arr_to_keyframes(arr):
     keyframes = ""
     for i, val in enumerate(arr):
+        val = roundZero(val)
         #if we previously had a zero, then we can stop emitting zeroes until right before the next nonzero
-        last_is_same = i > 0 and isclose(val, arr[i-1])
-        next_is_same = (i+1) < len(arr) and isclose(val, arr[i+1])
+        last_is_same = i > 0 and isclose(val, roundZero(arr[i-1]))
+        next_is_same = (i+1) < len(arr) and isclose(val, roundZero(arr[i+1]))
         
         omit = last_is_same and next_is_same
         
@@ -31,7 +38,7 @@ def arr_to_keyframes(arr):
             keyframes += f"{i}:({val}),"
     return keyframes
         
-def cameras_to_string(context, startFrame, endFrame, cameras, translation_scale = 50):
+def cameras_to_string(context, startFrame, endFrame, cameras, translation_scale = 50, output_camcode = True, output_json = False,):
     # get the current selection
     scene = context.scene
     currentFrame = scene.frame_current
@@ -76,31 +83,47 @@ def cameras_to_string(context, startFrame, endFrame, cameras, translation_scale 
             translation_z.append(-translation_scale*posDiffLocal.z)
             
             rotDiff = oldRot.rotation_difference(newRot).to_euler("XYZ")
+            
             rotation_3d_x.append(degrees(rotDiff.x))
-            rotation_3d_y.append(degrees(rotDiff.y))
-            rotation_3d_z.append(degrees(rotDiff.z))
+            rotation_3d_y.append(degrees(-rotDiff.y))
+            rotation_3d_z.append(degrees(-rotDiff.z))
                         
             oldMat = newMat
             oldRot = newRot
         
         #Done looping over frames, now to format for print
         export_string += f"\nCamera Export: {sel.name}\n"
-            
+        
+        
         export_string += f'translation_x = "{arr_to_keyframes(translation_x)}" #@param {{type:"string"}}\n'
         export_string += f'translation_y = "{arr_to_keyframes(translation_y)}" #@param {{type:"string"}}\n'
         export_string += f'translation_z = "{arr_to_keyframes(translation_z)}" #@param {{type:"string"}}\n'
         export_string += f'rotation_3d_x = "{arr_to_keyframes(rotation_3d_x)}" #@param {{type:"string"}}\n'
         export_string += f'rotation_3d_y = "{arr_to_keyframes(rotation_3d_y)}" #@param {{type:"string"}}\n'
         export_string += f'rotation_3d_z = "{arr_to_keyframes(rotation_3d_z)}" #@param {{type:"string"}}\n'
+        
+        if output_camcode:
+            export_string += f'cam_code:\n(translation_x,translation_y,translation_z,rotation_3d_x,rotation_3d_y,rotation_3d_z) = ("{arr_to_keyframes(translation_x)}", "{arr_to_keyframes(translation_y)}", "{arr_to_keyframes(translation_z)}", "{arr_to_keyframes(rotation_3d_x)}", "{arr_to_keyframes(rotation_3d_y)}", "{arr_to_keyframes(rotation_3d_z)}")\n'
+        
+        if output_json:
+            jsondict = {
+                "translation_x" : translation_x,
+                "translation_y" : translation_y,
+                "translation_z" : translation_z,
+                "rotation_3d_x" : rotation_3d_x,
+                "rotation_3d_y" : rotation_3d_y,
+                "rotation_3d_z" : rotation_3d_z}
+            export_string += f"JSON:\n {json.dumps(jsondict)}\n"
+        
         export_string += "\n"
                 
     #Done saving all cameras, restore original animation frame
     scene.frame_set(currentFrame)
     return export_string
 
-def write_camera_data(context, filepath, start, end, cams, scale):
+def write_camera_data(context, filepath, start, end, cams, scale, output_camcode, output_json):
     print("running write_camera_data...")
-    outputString = cameras_to_string(context, start, end, cams, scale)
+    outputString = cameras_to_string(context, start, end, cams, scale, output_camcode, output_json)
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(f"Export frames {start} - {end}\n")
         f.write(f"Export cameras {[c.name for c in cams]}\n")
@@ -139,8 +162,11 @@ class ExportDiffusionString(Operator, ExportHelper):
 #        default='3D',
 #    )
     
-    frame_start: IntProperty(name="Start", default=0)
-    frame_end: IntProperty(name="End", default=100)#bpy.context.scene.frame_end
+    output_json: BoolProperty(name="Output JSON", default=False)
+    output_cam_code: BoolProperty(name="Output cam_code", default=True)
+    
+    frame_start: IntProperty(name="Start", default=-1)
+    frame_end: IntProperty(name="End", default=-1)#bpy.context.scene.frame_end
     
     which_cams: EnumProperty(
         name="Which Cams",
@@ -167,8 +193,10 @@ class ExportDiffusionString(Operator, ExportHelper):
                 
         row = layout.row()
         row.label(text="Frames")
-        self.frame_start = bpy.context.scene.frame_start
-        self.frame_end = bpy.context.scene.frame_end
+        if self.frame_start == -1:
+            self.frame_start = bpy.context.scene.frame_start
+        if self.frame_end == -1:
+            self.frame_end = bpy.context.scene.frame_end
         row.prop(self, "frame_start")
         row.prop(self, "frame_end")
 
@@ -176,6 +204,11 @@ class ExportDiffusionString(Operator, ExportHelper):
 #        row.prop(self, "animation_mode")        
         row = layout.row()
         row.prop(self, "translation_scale")        
+        
+        row = layout.row()
+        row.prop(self, "output_cam_code")
+        row = layout.row()
+        row.prop(self, "output_json")
         
     def execute(self, context):
         export_cams = []
@@ -185,7 +218,8 @@ class ExportDiffusionString(Operator, ExportHelper):
             export_cams = [cam for cam in context.selected_objects if cam.type == 'CAMERA']
         elif self.which_cams == "ALL":
             export_cams = [cam for cam in context.scene.objects if cam.type == 'CAMERA']
-        return write_camera_data(context, self.filepath, self.frame_start, self.frame_end, export_cams, self.translation_scale)
+        return write_camera_data(context, self.filepath, self.frame_start, self.frame_end, export_cams, 
+        self.translation_scale, self.output_cam_code, self.output_json)
 
 
 # Only needed if you want to add into a dynamic menu
