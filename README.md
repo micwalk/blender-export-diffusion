@@ -17,6 +17,7 @@ Download/clone the repo, or just the file `export_diffusion.py`. In Blender go t
 * Start Frame - Which frame to start from, inclusive. Note: the first frame will always be exporteds as frame 0
 * End Frame - Which frame to stop at, exclusive. 
 * Translation Scale -- How much to multiply blender world units by for the translate x,y,z values.
+* Added export raw data - This option removes the clutter for ease of use copy/paste into webui. Working on webui import and parseq import.
 
 # Usage Notes
 After exporting, open the text file. All exported cameras will have their own block of strings. The strings are designed as python code you can copy/paste as a block into the notebook animation section.
